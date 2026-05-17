@@ -226,7 +226,7 @@
             ;; Note: Use read-from-string for asdf: symbols to avoid reader errors
             ;; when ASDF isn't loaded yet (Windows SBCL doesn't preload ASDF)
             ;; First ensure ASDF is available - some Lisps (CLISP) don't bundle it
-            (format nil "(progn
+            (format nil "(flet ((icl-slynk-init-body ()
   ;; Ensure ASDF is available (some Lisps like CLISP don't bundle it)
   (unless (find-package :asdf)
     (handler-case
@@ -273,7 +273,19 @@
   ;; Some implementations (CCL, ABCL) need this delay for the accept thread to start.
   (sleep 2)
   ;; Keep process alive (needed for CLISP with -x which exits after eval)
-  (loop (sleep 60)))"
+  (loop (sleep 60))))
+  ;; --- Dispatch ---
+  ;; LispWorks: must initialize multiprocessing before sockets/threads work.
+  ;; mp:initialize-multiprocessing takes (name properties function &rest args)
+  ;; and the supplied function becomes the new main process. It does not return.
+  #+lispworks
+  (progn (require \"comm\")
+         (mp:initialize-multiprocessing
+          \"icl-main\" () #'icl-slynk-init-body))
+  ;; Every other Lisp can just run the body directly.
+  #-lispworks
+  (icl-slynk-init-body))"
+
                     (when asdf-file (uiop:unix-namestring asdf-file))
                     (uiop:unix-namestring slynk-dir)
                     port)
