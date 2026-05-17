@@ -27,15 +27,30 @@
     (:clisp :program "clisp" :args nil :eval-arg "-x")
     (:abcl :program "abcl" :args nil :eval-arg "--eval")
     (:clasp :program "clasp" :args nil :eval-arg "--eval")
-    (:roswell :program "ros" :args ("run" "--") :eval-arg "--eval"))
+    (:roswell :program "ros" :args ("run" "--") :eval-arg "--eval")
+    ;; LispWorks console image. Override :program in ~/.iclrc to point at the
+    ;; actual executable on your system (e.g. lispworks-8-0-0-amd64-darwin).
+    ;; --- LispWorks notes ---
+    ;; * `-init -' and `-siteinit -' suppress user init files so Slynk start-up
+    ;;   is deterministic.
+    ;; * LispWorks accepts one `-eval' form; we pass the full Slynk init as a
+    ;;   single PROGN. The init form ends with (loop (sleep 1)) so the image
+    ;;   does not exit once -eval returns.
+    ;; * LispWorks Personal Edition cannot be driven this way (no command-line
+    ;;   eval, heap-size limits). Use the Professional/Enterprise console image.
+    (:lispworks :program "lw-console"
+                :args ("-init" "-" "-siteinit" "-")
+                :eval-arg "-eval"))
   "Known Lisp implementations and how to invoke them.")
 
 (defvar *default-lisp* :sbcl
   "Default Lisp implementation to use.")
 
 (defvar *lisp-implementation-order*
-  '(:roswell :sbcl :ccl :ecl :clisp :abcl :clasp)
-  "Order in which to try Lisp implementations when auto-detecting.")
+  '(:roswell :sbcl :ccl :ecl :clisp :abcl :clasp :lispworks)
+  "Order in which to try Lisp implementations when auto-detecting.
+   LispWorks is last because it is the least common and the program name is
+   site-specific (users typically override :program via configure-lisp).")
 
 (defvar *current-lisp* nil
   "Currently running Lisp implementation.")

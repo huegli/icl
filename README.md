@@ -509,7 +509,7 @@ Use `,show-config` to see the actual paths on your system.
 
 | Variable | Description |
 |----------|-------------|
-| `*default-lisp*` | Lisp implementation to use (`:sbcl`, `:ccl`, `:ecl`, `:clisp`, `:abcl`, `:clasp`, `:roswell`) |
+| `*default-lisp*` | Lisp implementation to use (`:sbcl`, `:ccl`, `:ecl`, `:clisp`, `:abcl`, `:clasp`, `:roswell`, `:lispworks`) |
 | `*prompt-string*` | Prompt format string (default: `"~A> "`) |
 | `*result-prefix*` | Prefix for results (default: `"=> "`) |
 | `*colors-enabled*` | Enable syntax coloring (default: `t`) |
@@ -539,6 +539,12 @@ Use `configure-lisp` to customize how ICL invokes a Lisp implementation:
 (icl:configure-lisp :sbcl
   :program "/opt/sbcl/bin/sbcl"
   :args '("--dynamic-space-size" "8192"))
+
+;; LispWorks: point at your console image binary.
+;; The default :args ("-init" "-" "-siteinit" "-") suppress user init files;
+;; keep them, or replace with your own startup flags.
+(icl:configure-lisp :lispworks
+  :program "/Applications/LispWorks 8.0 (64-bit)/LispWorks (64-bit).app/Contents/MacOS/lispworks-8-0-0-amd64-darwin")
 
 ;; Enable paredit mode
 (setf icl:*paredit-mode* t)
@@ -615,6 +621,7 @@ ICL aims to support multiple Common Lisp implementations. SBCL is the primary de
 | Roswell | Tested |
 | Clasp | Untested |
 | CLISP | Experimental |
+| LispWorks | Experimental (override `:program` in `~/.iclrc`) |
 
 ## Architecture
 

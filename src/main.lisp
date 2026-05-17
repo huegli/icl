@@ -60,7 +60,7 @@
    :string
    :long-name "lisp"
    :key :lisp
-   :description "Lisp implementation (roswell, sbcl, ccl, ecl, clisp, abcl, clasp)"))
+   :description "Lisp implementation (roswell, sbcl, ccl, ecl, clisp, abcl, clasp, lispworks)"))
 
 (defun make-connect-option ()
   "Create --connect option to connect to an existing Slynk server."
