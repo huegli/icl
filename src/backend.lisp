@@ -276,12 +276,16 @@
   (loop (sleep 60))))
   ;; --- Dispatch ---
   ;; LispWorks: must initialize multiprocessing before sockets/threads work.
-  ;; mp:initialize-multiprocessing takes (name properties function &rest args)
-  ;; and the supplied function becomes the new main process. It does not return.
+  ;; mp:initialize-multiprocessing takes (name properties function &rest args),
+  ;; spawns the new main process, then RETURNS to its caller. If we let the
+  ;; outer -eval form finish here, LispWorks exits and takes the freshly-
+  ;; spawned Slynk main process down with it. Block forever after the call so
+  ;; the image stays up.
   #+lispworks
   (progn (require \"comm\")
          (mp:initialize-multiprocessing
-          \"icl-main\" () #'icl-slynk-init-body))
+          \"icl-main\" () #'icl-slynk-init-body)
+         (loop (sleep 60)))
   ;; Every other Lisp can just run the body directly.
   #-lispworks
   (icl-slynk-init-body))"
