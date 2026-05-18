@@ -274,10 +274,14 @@
               (list (cons '*debug-io* io)
                     (cons '*query-io* io)
                     (cons '*terminal-io* io))))))
-  ;; Start Slynk server quietly
+  ;; Start Slynk server quietly.
+  ;; Bind explicitly to IPv4 127.0.0.1: LispWorks (and some other Lisps) resolve
+  ;; Slynk's default \"localhost\" interface to IPv6 ::1 on macOS, but ICL's host
+  ;; (e.g. SBCL with usocket) connects via IPv4, leading to ECONNREFUSED. Forcing
+  ;; the listener to 127.0.0.1 sidesteps the host's getaddrinfo preference.
   (let ((*standard-output* (make-broadcast-stream)))
     (funcall (read-from-string \"slynk:create-server\")
-             :port ~D :dont-close t))
+             :port ~D :dont-close t :interface \"127.0.0.1\"))
   ;; Give the server thread time to fully initialize before we consider it ready.
   ;; Some implementations (CCL, ABCL) need this delay for the accept thread to start.
   (sleep 2)
