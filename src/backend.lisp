@@ -40,7 +40,11 @@
     ;;   eval, heap-size limits). Use the Professional/Enterprise console image.
     (:lispworks :program "lw-console"
                 :args ("-init" "-" "-siteinit" "-")
-                :eval-arg "-eval"))
+                :eval-arg "-eval"
+                ;; First run compiles 14 slynk source files to .64yfasl; on
+                ;; cold cache this is well over the default 60s budget.
+                ;; Subsequent runs use cached fasls and connect in ~5s.
+                :slynk-timeout 120))
   "Known Lisp implementations and how to invoke them.")
 
 (defvar *default-lisp* :sbcl
@@ -55,12 +59,14 @@
 (defvar *current-lisp* nil
   "Currently running Lisp implementation.")
 
-(defun configure-lisp (impl &key program args eval-arg)
+(defun configure-lisp (impl &key program args eval-arg slynk-timeout)
   "Configure how to invoke a Lisp implementation.
    IMPL - keyword like :sbcl, :ccl, etc.
    PROGRAM - path to executable (e.g., \"/opt/sbcl/bin/sbcl\")
    ARGS - list of extra command-line arguments
    EVAL-ARG - the eval flag (e.g., \"--eval\")
+   SLYNK-TIMEOUT - seconds to wait for the Slynk port to open (default 60).
+     Bump this if the inferior Lisp needs to cold-compile Slynk on first run.
 
    Example in ~/.iclrc:
      (icl:configure-lisp :sbcl
@@ -73,13 +79,16 @@
           (when program (setf (getf plist :program) program))
           (when args (setf (getf plist :args) args))
           (when eval-arg (setf (getf plist :eval-arg) eval-arg))
+          (when slynk-timeout (setf (getf plist :slynk-timeout) slynk-timeout))
           (setf (rest entry) plist))
         ;; Add new entry
-        (push (list* impl
-                     :program (or program (string-downcase (symbol-name impl)))
-                     :args args
-                     :eval-arg (or eval-arg "--eval"))
-              *lisp-implementations*))
+        (let ((new (list impl
+                         :program (or program (string-downcase (symbol-name impl)))
+                         :args args
+                         :eval-arg (or eval-arg "--eval"))))
+          (when slynk-timeout
+            (setf (getf (cdr new) :slynk-timeout) slynk-timeout))
+          (push new *lisp-implementations*)))
     impl))
 
 (defun lisp-available-p (impl)
@@ -527,7 +536,12 @@
       ;; Wait for Slynk to start with spinner
       ;; Use real elapsed time instead of ticks to account for verification time
       (let ((start-time (get-internal-real-time))
-            (max-seconds 60)  ; 60 seconds max (was 42s but CCL needs more time)
+            ;; Allow per-implementation override via :slynk-timeout in
+            ;; *lisp-implementations*. Default 60s covers SBCL/CCL/ECL/ABCL.
+            ;; LispWorks needs more on first run (Slynk cold-compile).
+            (max-seconds (or (getf (cdr (assoc lisp *lisp-implementations*))
+                                   :slynk-timeout)
+                             60))
             (last-attempt-time 0)
             (attempt-interval 0.5)  ; seconds between attempts
             (initial-delay 4.0)  ; seconds before first attempt (allow time for Slynk init + 2s settle delay)

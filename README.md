@@ -543,8 +543,12 @@ Use `configure-lisp` to customize how ICL invokes a Lisp implementation:
 ;; LispWorks: point at your console image binary.
 ;; The default :args ("-init" "-" "-siteinit" "-") suppress user init files;
 ;; keep them, or replace with your own startup flags.
+;; First-run cold compile of Slynk on LispWorks takes ~60-90s, so the default
+;; :slynk-timeout is 120s for this backend. Bump higher if you have a slow disk.
 (icl:configure-lisp :lispworks
-  :program "/Applications/LispWorks 8.0 (64-bit)/LispWorks (64-bit).app/Contents/MacOS/lispworks-8-0-0-amd64-darwin")
+  :program "/Applications/LispWorks 8.0 (64-bit)/LispWorks (64-bit).app/Contents/MacOS/lispworks-8-0-0-amd64-darwin"
+  ;; :slynk-timeout 180   ; uncomment if first run still times out
+  )
 
 ;; Enable paredit mode
 (setf icl:*paredit-mode* t)
