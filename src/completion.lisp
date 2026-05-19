@@ -504,28 +504,112 @@
     (sort (remove-duplicates results :test #'string-equal) #'string<)))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Completion Cache
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;;
+;;; Inline hints (compute-inline-hint, called from the editor after every
+;;; keystroke) invoke compute-completions on each character. For Slynk-backed
+;;; types that means a network round-trip per keystroke. On SBCL that's a few
+;;; milliseconds; on LispWorks (heavier apropos/dspec, plus load-on-demand on
+;;; first use) it dominates typing latency and makes the line editor feel
+;;; sluggish.
+;;;
+;;; When a user extends a symbol by one character, the candidate set for the
+;;; longer prefix is a subset of the set for the shorter one. We keep the
+;;; most recent (type, package, prefix, candidates) and, if the next request
+;;; has the same type and package with a prefix that extends the cached one,
+;;; filter locally instead of issuing a fresh RPC. The cache is invalidated
+;;; on eval and on package change; see invalidate-completion-cache.
+
+(defstruct completion-cache-entry
+  (type nil)
+  (package "" :type string)
+  (prefix "" :type string)
+  (candidates nil :type list))
+
+(defvar *completion-cache* nil
+  "Most recent COMPLETION-CACHE-ENTRY, or NIL.")
+
+(defun invalidate-completion-cache ()
+  "Drop the cached completion entry. Called from the post-eval path and
+   from backend-set-package because either may intern new symbols or
+   change which symbols are visible."
+  (setf *completion-cache* nil))
+
+(defun completion-cacheable-type-p (type)
+  "Types whose results we filter locally on prefix extension.
+   The local-only types (:command, :path, :theme-*) are already cheap."
+  (member type '(:symbol :keyword :qualified :package :system :ocicl-system)))
+
+(defun completion-prefix-extends-p (cached new)
+  "T when NEW is a case-insensitive extension of CACHED."
+  (and (>= (length new) (length cached))
+       (string-equal cached new :end2 (length cached))))
+
+(defun completion-filter-by-prefix (candidates prefix)
+  "Keep candidates whose case-insensitive prefix is PREFIX.
+   Order is preserved (callers pre-sort)."
+  (let ((plen (length prefix)))
+    (loop for s in candidates
+          when (and (stringp s)
+                    (>= (length s) plen)
+                    (string-equal s prefix :end1 plen))
+            collect s)))
+
+(defun completion-cache-lookup (type prefix)
+  "Return (VALUES CANDIDATES HIT-P). HIT-P distinguishes
+   \"cache served an empty list\" from \"cache miss\"."
+  (let ((entry *completion-cache*))
+    (if (and entry
+             (eq (completion-cache-entry-type entry) type)
+             (string-equal (completion-cache-entry-package entry)
+                           *icl-package-name*)
+             (completion-prefix-extends-p
+              (completion-cache-entry-prefix entry) prefix))
+        (values (completion-filter-by-prefix
+                 (completion-cache-entry-candidates entry) prefix)
+                t)
+        (values nil nil))))
+
+(defun completion-cache-store (type prefix candidates)
+  (setf *completion-cache*
+        (make-completion-cache-entry
+         :type type
+         :package *icl-package-name*
+         :prefix prefix
+         :candidates candidates)))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Main Completion Interface
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun compute-completions (prefix type)
-  "Compute completion candidates for PREFIX of TYPE using Slynk backend."
+  "Compute completion candidates for PREFIX of TYPE using Slynk backend.
+   Slynk-backed results are served from *completion-cache* when the prefix
+   extends the most recently cached one in the same package and type."
   ;; Don't complete empty prefix (except for paths and theme contexts)
   (when (and (zerop (length prefix))
              (not (member type '(:path :theme-subcommand :theme-name))))
     (return-from compute-completions nil))
-  (case type
-    (:none nil)  ; No completion in this context
-    (:command (complete-command prefix))
-    (:package (complete-package-via-slynk prefix))
-    (:system (complete-system-via-slynk prefix))
-    (:ocicl-system (complete-ocicl-system prefix))
-    (:symbol (complete-symbol-via-slynk prefix))
-    (:keyword (complete-keyword-via-slynk prefix))
-    (:qualified (complete-qualified-via-slynk prefix))
-    (:path (complete-path prefix))  ; Paths are always local
-    (:theme-subcommand (complete-theme-subcommand prefix))
-    (:theme-name (complete-theme-name prefix))
-    (otherwise (complete-symbol-via-slynk prefix))))
+  (multiple-value-bind (cached hit-p) (completion-cache-lookup type prefix)
+    (when hit-p
+      (return-from compute-completions cached)))
+  (let ((result (case type
+                  (:none nil)  ; No completion in this context
+                  (:command (complete-command prefix))
+                  (:package (complete-package-via-slynk prefix))
+                  (:system (complete-system-via-slynk prefix))
+                  (:ocicl-system (complete-ocicl-system prefix))
+                  (:symbol (complete-symbol-via-slynk prefix))
+                  (:keyword (complete-keyword-via-slynk prefix))
+                  (:qualified (complete-qualified-via-slynk prefix))
+                  (:path (complete-path prefix))  ; Paths are always local
+                  (:theme-subcommand (complete-theme-subcommand prefix))
+                  (:theme-name (complete-theme-name prefix))
+                  (otherwise (complete-symbol-via-slynk prefix)))))
+    (when (completion-cacheable-type-p type)
+      (completion-cache-store type prefix result))
+    result))
 
 (defun complete-command (prefix)
   "Complete command PREFIX (starts with comma).

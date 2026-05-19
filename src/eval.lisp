@@ -123,6 +123,10 @@
               (run-after-eval-hooks form values)))
           ;; Always sync prompt package from backend after successful eval.
           (sync-package-context-from-backend)
+          ;; Drop the inline-hint completion cache: the eval may have
+          ;; interned new symbols (e.g. defun) that would otherwise be
+          ;; invisible until the cache expires by structural mismatch.
+          (invalidate-completion-cache)
           ;; Record for MCP history access
           (let ((result-str (cond
                               ((null result) "")

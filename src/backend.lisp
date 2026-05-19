@@ -670,4 +670,6 @@ Returns two values: output-string and list of result strings."
 (defun backend-set-package (package-name)
   "Change current package using Slynk backend."
   (ensure-backend)
-  (slynk-set-package package-name))
+  (slynk-set-package package-name)
+  ;; Visible symbol set just changed; drop the inline-hint completion cache.
+  (invalidate-completion-cache))
